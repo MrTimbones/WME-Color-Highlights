@@ -230,9 +230,11 @@ function highlightSegments(event) {
         // No Speed Limits = Orange
         else if (showSpeedLimits && (plusStreets && segment.roadType == 1 || plusRamps && segment.roadType == 4 || segment.roadType > 1 && segment.roadType != 4)
             && segment.roadType < 8 && segment.roadType != 5
-            && isRoundabout && (plusStreets || segment.junctionId == null)
-            && ((segment.isAtoB && (segment.fwdSpeedLimit == null || !segment.isFwdSpeedLimitVerified)) ||
-                (segment.isBtoA && (segment.revSpeedLimit == null || !segment.isRevSpeedLimitVerified)))) {
+            && (plusStreets || segment.junctionId == null)
+            && (
+                ((segment.isAtoB || segment.isTwoWay) && (segment.fwdSpeedLimit == null || !segment.isFwdSpeedLimitVerified)) ||
+                ((segment.isBtoA || segment.isTwoWay) && (segment.revSpeedLimit == null || !segment.isRevSpeedLimitVerified)))
+            ) {
             newColor = "#f80";
             newOpacity = 0.8;
             newWidth = 4;
