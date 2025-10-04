@@ -6,7 +6,7 @@
 // @include             https://www.waze.com/editor*
 // @include             https://beta.waze.com/*
 // @exclude             https://www.waze.com/*user/*editor/*
-// @version             3.01
+// @version             3.02
 // @grant               none
 // @downloadURL         https://update.greasyfork.org/scripts/3206/WME%20Color%20Highlights.user.js
 // @updateURL           https://update.greasyfork.org/scripts/3206/WME%20Color%20Highlights.meta.js
@@ -231,8 +231,8 @@ function highlightSegments(event) {
         else if (showSpeedLimits && (plusStreets && segment.roadType == 1 || plusRamps && segment.roadType == 4 || segment.roadType > 1 && segment.roadType != 4)
             && segment.roadType < 8 && segment.roadType != 5
             && isRoundabout && (plusStreets || segment.junctionId == null)
-            && ((segment.isAtoB && (segment.fwdSpeedLimit == null || segment.isFwdSpeedLimitVerified)) ||
-                (segment.isBtoA && (segment.revSpeedLimit == null || segment.isRevSpeedLimitVerified)))) {
+            && ((segment.isAtoB && (segment.fwdSpeedLimit == null || !segment.isFwdSpeedLimitVerified)) ||
+                (segment.isBtoA && (segment.revSpeedLimit == null || !segment.isRevSpeedLimitVerified)))) {
             newColor = "#f80";
             newOpacity = 0.8;
             newWidth = 4;
