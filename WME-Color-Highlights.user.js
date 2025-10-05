@@ -226,6 +226,17 @@ function highlightSegments(event) {
                 newDashes = "10 10";
             }
         }
+            
+        // No Speed Limits = RED [Rule for UKRAINE - All types of roads except: walk/ferry/RR/runway/stair]
+        else if (city.countryId ==232 && showSpeedLimits && [1, 2, 3, 4, 6, 7, 8, 17, 20, 22].includes(segment.roadType)
+                 && (((segment.isAtoB || segment.isTwoWay) && (segment.fwdSpeedLimit == null || !segment.isFwdSpeedLimitVerified)) ||
+                     ((segment.isBtoA || segment.isTwoWay) && (segment.revSpeedLimit == null || !segment.isRevSpeedLimitVerified)))) {
+
+            newColor = "#f00";
+            newOpacity = 0.8;
+            newDashes = "10 10";
+            newWidth = 4;
+        }
 
         // No Speed Limits = Orange
         else if (showSpeedLimits && (plusStreets && segment.roadType == 1 || plusRamps && segment.roadType == 4 || segment.roadType > 1 && segment.roadType != 4)
