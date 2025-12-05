@@ -6,12 +6,13 @@
 // @include             https://www.waze.com/editor*
 // @include             https://beta.waze.com/*
 // @exclude             https://www.waze.com/*user/*editor/*
-// @version             3.02
 // @grant               none
 // @downloadURL         https://update.greasyfork.org/scripts/3206/WME%20Color%20Highlights.user.js
 // @updateURL           https://update.greasyfork.org/scripts/3206/WME%20Color%20Highlights.meta.js
+// @version             3.03
 // ==/UserScript==
 
+const wmech_version = "3.03";
 
 let wmeSDK;
 window.SDK_INITIALIZED.then(() => {
@@ -21,8 +22,6 @@ window.SDK_INITIALIZED.then(() => {
 
 // global variables
 const NOT_THIS_USER = 'NOT_THIS_USER';
-
-const wmech_version = "3.01";
 
 const advancedMode = false;
 const lastModified = false;
@@ -542,8 +541,9 @@ function highlightPlaces(event) {
 
     if (specificCity) {
         const selectCity = getId('_selectCity');
+        var selectedCityId;
         if (selectCity.selectedIndex >= 0) {
-            var selectedCityId = selectCity.options[selectCity.selectedIndex].value;
+            selectedCityId = selectCity.options[selectCity.selectedIndex].value;
         }
         else {
             specificCity = false;
@@ -594,19 +594,23 @@ function highlightPlaces(event) {
 
         const categories = venue.categories;
 
+        if (showIncomplete || specificCity) {
+            var address = wmeSDK.DataModel.Venues.getAddress({venueId: venue.id});
+            var venueStreet = streetData.find(({id}) => id == address.street.id);
+        }
+
         if (showIncomplete) {
             let incomplete = false;
             let colorhilite = false;
-            let venueStreet = streetData.find(({id}) => id == venue.id);
 
-            // check for missing venue name
+            // check for missing venue name (ignoring residentials)
             if (!venue.name) {
                 incomplete = !venue.isResidential;
                 colorhilite = true;
             }
 
             // check for missing street name
-            if (!venueStreet?.street) {
+            if (!venueStreet?.name) {
                 incomplete = true;
                 colorhilite = true;
             }
@@ -622,7 +626,7 @@ function highlightPlaces(event) {
                 || venueMainCategories.some(category => categories.includes(category))) {
                 incomplete = (venue.lockRank == 0);
             }
-            else if (venue.externalProviderIDs?.length === 0) {
+            else if (venue.externalProviderIds?.length === 0) {
                 incomplete = true;
             }
 
@@ -656,12 +660,8 @@ function highlightPlaces(event) {
         }
 
         // highlight places which have the City field set in the address = pink
-        if (specificCity) {
-            let venueStreet = streetData.find(({id}) => id == venue.id);
-            if (venueStreet?.city == null) {
-                continue;
-            }
-            let selectedCityMatch = (specificCity && venueStreet.city.id == selectedCityId);
+        if (specificCity && venueStreet?.cityId != null) {
+            let selectedCityMatch = (specificCity && venueStreet.cityId == selectedCityId);
             if (specificCityInvert) selectedCityMatch = !selectedCityMatch;
 
             if (selectedCityMatch) {
