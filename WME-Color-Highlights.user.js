@@ -961,10 +961,104 @@ function highlightAPlace(venue, fg, bg) {
     }
 }
 
+function getAllPermanentHazards() {
+    return W.model.permanentHazards.getObjectArray().map((object) => ({
+        id: object.getID(),
+        modificationData: {
+            createdOn: object.attributes.createdOn,
+            createdBy: W.model.users.getObjectById(object.attributes.createdBy)?.attributes.userName,
+            updatedOn: object.attributes.updatedOn,
+            updatedBy: W.model.users.getObjectById(object.attributes.updatedBy)?.attributes.userName,
+        },
+    }));
+}
+
+function highlightPermanentHazards(event) {
+    const showHazards = getId('_cbHighlightPermanentHazards').checked;
+
+    // refreshing, reset hazards to original style
+    if (event?.type && /click|change/.test(event.type)) {
+        for (const hazard of getAllPermanentHazards()) {
+            const symbol = wmeSDK.Map.getFeatureDomElement({
+                featureId: hazard.id,
+                layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER
+            });
+
+            symbol?.setAttribute?.("fill", 'transparent');
+        }
+    }
+
+    // if option is disabled, stop now
+    if (!showHazards) {
+        return;
+    }
+
+    const shouldHighlightAsEdited = (() => {
+        const specificEditorId = (() => {
+            if (!getId('_cbHighlightEditor').checked) return null;
+
+            const selectEditor = getId('_selectUser');
+            if (!selectEditor || selectEditor.selectedIndex < 0) return null;
+
+            const editorName = selectEditor.options[selectEditor.selectedIndex].value;
+            return editorName === NOT_THIS_USER ? true : editorName;
+        })();
+        const showRecent = (() => {
+            if (!getId('_cbHighlightRecent').checked) return null;
+
+            const recentDays = getId('_numRecentDays');
+            if (!recentDays || typeof recentDays.value === 'undefined') return null;
+            return recentDays.value;
+        })();
+
+        return (hazard) => {
+            const isMatchSpecificEditor = (() => {
+                if (specificEditorId === null) return false;
+                if (specificEditorId === true)
+                    return hazard.modificationData.updatedBy !== wmeSDK.State.getUserInfo().userName;
+                return hazard.modificationData.updatedBy === specificEditorId;
+            })();
+            const isMatchRecent = showRecent !== null && (() => {
+                const today = new Date();
+                let editDays = (today.getTime() - hazard.modificationData.createdOn) / 86400000;
+                if (hazard.modificationData.updatedOn !== null) {
+                    editDays = (today.getTime() - hazard.modificationData.updatedOn) / 86400000;
+                }
+                return editDays <= showRecent;
+            })();
+
+            if (specificEditorId !== null && showRecent !== null) {
+                // both conditions must be met
+                return isMatchSpecificEditor && isMatchRecent;
+            }
+            
+            return isMatchRecent || isMatchSpecificEditor;
+        };
+    })();
+
+
+    for (var hazard of getAllPermanentHazards()) {
+        const symbol = wmeSDK.Map.getFeatureDomElement({featureId: hazard.id, layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER});
+        if (!symbol) continue;
+
+        const newFill = shouldHighlightAsEdited(hazard) ? '#0f0' : null;
+
+        if (newFill) {;
+    }
+}
+
 // used when clicking an option that affects both Segments and Places
 function highlightSegmentsAndPlaces(event) {
     highlightSegments(event);
     highlightPlaces(event);
+}
+
+function createHighlightMultipleLayers(segments, places, permanentHazards) {
+    return function(event) {
+        if (segments) highlightSegments(event);
+        if (places) highlightPlaces(event);
+        if (permanentHazards) highlightPermanentHazards(event);
+    }
 }
 
 // add logged in user to drop-down list
@@ -1314,6 +1408,17 @@ async function initialiseHighlights() {
         `;
     section.appendChild(highlightPlacesSection);
 
+    const highlightHazardsSection = document.createElement('p');
+    highlightHazardsSection.id = "highlightPermanentHazards";
+    highlightHazardsSection.className = 'checkbox';
+    highlightHazardsSection.innerHTML = `
+            <label title="Highlight Permanent Hazards edited recently or by selected editor">
+                <input type="checkbox" id="_cbHighlightPermanentHazards" />
+                <b>Highlight Permanent Hazards</b>
+            </label>
+        `;
+    section.appendChild(highlightHazardsSection);
+
     // Add footer link
     section.innerHTML += `
             <b><a href="https://greasyfork.org/scripts/3206-wme-color-highlights" target="_blank"><u>WME Color Highlights</u></a></b> &nbsp; v${wmech_version}
@@ -1344,8 +1449,8 @@ async function initialiseHighlights() {
     getId('_cbHighlightRoutingPref').onclick = highlightSegments;
     getId('_cbHighlightNoHN').onclick = highlightSegments;
 
-    getId('_cbHighlightRecent').onclick = highlightSegmentsAndPlaces;
-    getId('_cbHighlightEditor').onclick = highlightSegmentsAndPlaces;
+    getId('_cbHighlightRecent').onclick = createHighlightMultipleLayers(true, true, true);
+    getId('_cbHighlightEditor').onclick = createHighlightMultipleLayers(true, true, true);
     getId('_cbHighlightCity').onclick = highlightSegmentsAndPlaces;
     getId('_cbHighlightCityInvert').onclick = highlightSegmentsAndPlaces;
     getId('_cbHighlightRoadType').onclick = highlightSegments;
@@ -1353,7 +1458,7 @@ async function initialiseHighlights() {
     getId('_selectUser').onfocus = updateUserList;
     getId('_selectUser').onclick = function (e) {
         getId('_cbHighlightEditor').checked = 1;
-        highlightSegmentsAndPlaces(e);
+        createHighlightMultipleLayers(true, true, true)(e);
     };
 
     getId('_selectCity').onfocus = updateCityList;
@@ -1370,12 +1475,14 @@ async function initialiseHighlights() {
     getId('_numRecentDays').onchange = highlightSegmentsAndPlaces;
     getId('_numRecentDays').onclick = function (e) {
         getId('_cbHighlightRecent').checked = 1;
-        highlightSegmentsAndPlaces(e);
+        createHighlightMultipleLayers(true, true, true)(e);
     };
 
     getId('_cbHighlightPlaces').onclick = highlightPlaces;
     getId('_cbHighlightLockedPlaces').onclick = highlightPlaces;
     getId('_cbHighlightIncompletePlaces').onclick = highlightPlaces;
+
+    getId('_cbHighlightPermanentHazards').onclick = highlightPermanentHazards;
 
 
     // restore saved settings
@@ -1410,6 +1517,8 @@ async function initialiseHighlights() {
         getId('_numRecentDays').value = options[12];
         getId('_cbHighlightEditor').checked = options[13];
         getId('_cbHighlightRoutingPref').checked = options[25];
+
+        getId('_cbHighlightPermanentHazards').checked = options[30];
     }
     else {
         getId('_cbHighlightPlaces').checked = true;
@@ -1456,6 +1565,9 @@ async function initialiseHighlights() {
             options[13] = getId('_cbHighlightEditor').checked;
             options[25] = getId('_cbHighlightRoutingPref').checked;
 
+            // permanent hazards
+            options[30] = getId('_cbHighlightPermanentHazards').checked;
+
             localStorage.WMEHighlightScript = JSON.stringify(options);
         }
     };
@@ -1481,11 +1593,13 @@ async function initialiseHighlights() {
 const highlightObjectsOnDataLoaded = debounce(function () {
     highlightSegments();
     highlightPlaces();
+    highlightPermanentHazards();
 }, 300);
 
 const highlightObjectsOnMouseMove = debounce(function () {
     highlightSegments();
     highlightPlaces();
+    highlightPermanentHazards();
 }, 250);
 
 function debounce(func, wait) {
