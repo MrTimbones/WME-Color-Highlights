@@ -20,6 +20,148 @@ window.SDK_INITIALIZED.then(() => {
     wmeSDK.Events.once({eventName: "wme-ready"}).then(initialiseHighlights);
 });
 
+function catchError(fn, errorsToCatch = []) {
+    try {
+        return [null, fn()];
+    } catch (e) {
+        if (!errorsToCatch || errorsToCatch.length === 0 || errorsToCatch.some(error => e instanceof error)) {
+            return [e, null];
+        }
+        throw e;
+    }
+}
+
+function trackDataModelEvents(dataModelName, featureMapper, {
+    added,
+    changed,
+    deleted,
+    removed,
+    saved,
+}) {
+    const createHandler = (handler) => {
+        return ({ dataModelName: eventDataModelName, ...args }) => {
+            if (dataModelName !== eventDataModelName) return;
+            handler(args);
+        }
+    }
+
+    let hasSubscribedEvents = false;
+    if (added || removed) {
+        hasSubscribedEvents = true;
+        wmeSDK.Events.on({
+            eventName: 'wme-data-model-object-changed-id',
+            eventHandler: createHandler(({ objectIds }) => {
+                if (removed) removed(featureMapper(objectIds.oldID));
+                if (added) added(featureMapper(objectIds.newID));
+            }),
+        });
+    }
+    if (added) {
+        hasSubscribedEvents = true;
+        wmeSDK.Events.on({
+            eventName: 'wme-data-model-objects-added',
+            eventHandler: createHandler(({ objectIds }) => {
+                objectIds.forEach((id) => added(featureMapper(id)));
+            }),
+        });
+    }
+    if (changed) {
+        hasSubscribedEvents = true;
+        wmeSDK.Events.on({
+            eventName: 'wme-data-model-objects-changed',
+            eventHandler: createHandler(({ objectIds }) => {
+                objectIds.forEach((id) => changed(featureMapper(id)));
+            }),
+        });
+    }
+    if (deleted) {
+        hasSubscribedEvents = true;
+        wmeSDK.Events.on({
+            eventName: 'wme-data-model-object-state-deleted',
+            eventHandler: createHandler(({ objectIds }) => {
+                objectIds.forEach((id) => deleted(featureMapper(id)));
+            }),
+        });
+    }
+    if (saved) {
+        hasSubscribedEvents = true;
+        wmeSDK.Events.on({
+            eventName: 'wme-data-model-objects-saved',
+            eventHandler: createHandler(({ objectIds }) => {
+                objectIds.forEach((id) => saved(featureMapper(id)));
+            }),
+        });
+    }
+    if (removed) {
+        hasSubscribedEvents = true;
+        wmeSDK.Events.on({
+            eventName: 'wme-data-model-objects-removed',
+            eventHandler: createHandler(({ objectIds }) => {
+                objectIds.forEach((id) => removed(id));
+            }),
+        });
+    }
+
+    if (hasSubscribedEvents) {
+        const [validationError] = catchError(() => wmeSDK.Events.trackDataModelEvents({ dataModelName }), [wmeSDK.Errors.ValidationError]);
+        if (validationError) {
+            // ideally, the WME SDK should not throw ValidationError here, but if it does,
+            // then we're dealing with a data model that does not support native event tracking through the SDK
+            // which is a shame, due to how generic the data model event tracking mechanism is
+            // so we'll have to resort to manually hatching the underlying WME events and match the SDK safety guards
+
+            if (wmeSDK.Events.trackedDataModels.has(dataModelName)) return;
+
+            const repo = W.model.getRepositoryByName(dataModelName);
+            if (!repo)
+                throw new Error(`Data model repository not found: ${dataModelName}`);
+            
+            const eventsToSubscribe = {
+                objectsadded: (features) => {
+                    wmeSDK.Events.eventBus.trigger('wme-data-model-objects-added', {
+                        dataModelName,
+                        objectIds: features.map((f) => f.getID()).filter((id) => id != null),
+                    });
+                },
+                objectschanged: (features) => {
+                    wmeSDK.Events.eventBus.trigger('wme-data-model-objects-changed', {
+                        dataModelName,
+                        objectIds: features.map((f) => f.getID()).filter((id) => id != null),
+                    });
+                },
+                'objectschanged-id': (objectIds) => {
+                    wmeSDK.Events.eventBus.trigger('wme-data-model-object-changed-id', {
+                        dataModelName,
+                        objectIds,
+                    });
+                },
+                objectsremoved: (features) => {
+                    wmeSDK.Events.eventBus.trigger('wme-data-model-objects-removed', {
+                        dataModelName,
+                        objectIds: features.map((f) => f.getID()).filter((id) => id != null),
+                    });
+                },
+                'objects-state-deleted': (features) => {
+                    wmeSDK.Events.eventBus.trigger('wme-data-model-object-state-deleted', {
+                        dataModelName,
+                        objectIds: features.map((f) => f.getID()).filter((id) => id != null),
+                    });
+                },
+                'objectssynced': (features) => {
+                    wmeSDK.Events.eventBus.trigger('wme-data-model-objects-saved', {
+                        dataModelName,
+                        objectIds: features.map((f) => f.getID()).filter((id) => id != null),
+                    });
+                },
+            };
+            Object.entries(eventsToSubscribe).forEach(([eventName, handler]) => {
+                repo.on(eventName, handler);
+            });
+            wmeSDK.Events.trackedDataModels.set(dataModelName, { events: eventsToSubscribe });
+        }
+    }
+}
+
 // global variables
 const NOT_THIS_USER = 'NOT_THIS_USER';
 
