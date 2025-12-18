@@ -15,9 +15,11 @@
 const wmech_version = "3.03";
 
 let wmeSDK;
+const PERMANENT_HAZARDS_HIGHLIGHTING_LAYER = 'color_highlights_permanent_hazards';
 window.SDK_INITIALIZED.then(() => {
     wmeSDK = getWmeSdk({scriptId: "wme-color-highlights", scriptName: "WME Color Highlights"});
     wmeSDK.Events.once({eventName: "wme-ready"}).then(initialiseHighlights);
+    initPermanentHazardsLayer();
 });
 
 function catchError(fn, errorsToCatch = []) {
@@ -160,6 +162,65 @@ function trackDataModelEvents(dataModelName, featureMapper, {
             wmeSDK.Events.trackedDataModels.set(dataModelName, { events: eventsToSubscribe });
         }
     }
+}
+
+function getPermanentHazardDisplayGeometry(objectId) {
+    for (const layer of W.map.permanentHazardLayers) {
+        if (!layer.featureMap) continue;
+        if (!layer.featureMap.has(objectId)) continue;
+        const feature = layer.featureMap.get(objectId);
+        const openLayersGeometry = feature.geometry;
+        return W.userscripts.toGeoJSONGeometry(openLayersGeometry);
+    }
+}
+
+function initPermanentHazardsLayer() {
+    const [addLayerFailed] = catchError(() => {
+        wmeSDK.Map.addLayer({
+            layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER,
+            styleRules: [
+                {
+                    style: {
+                        pointRadius: 20,
+                        fillColor: 'transparent',
+                        fillOpacity: 0.4,
+                        stroke: false,
+                    },
+                },
+            ],
+        });
+    }, [wmeSDK.Errors.InvalidStateError]);
+    if (addLayerFailed) return;
+
+    const addPermanentHazard = (hazard) => {
+        wmeSDK.Map.addFeatureToLayer({
+            layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER,
+            feature: {
+                type: 'Feature',
+                id: hazard.getID(),
+                geometry: getPermanentHazardDisplayGeometry(hazard.getID()),
+                properties: {
+                    wazeFeature: hazard,
+                },
+            }
+        });
+    };
+    const removePermanentHazard = (hazardId) => {
+        wmeSDK.Map.removeFeatureFromLayer({
+            layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER,
+            featureId: hazardId,
+        });
+    };
+
+    trackDataModelEvents('permanentHazards', (id) => W.model.permanentHazards.objects[id], {
+        added: (hazard) => addPermanentHazard(hazard),
+        removed: (hazardId) => removePermanentHazard(hazardId),
+        deleted: (hazard) => removePermanentHazard(hazard.getID()),
+        changed: (hazard) => {
+            removePermanentHazard(hazard.getID());
+            addPermanentHazard(hazard);
+        },
+    });
 }
 
 // global variables
