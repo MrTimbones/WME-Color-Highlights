@@ -1041,7 +1041,7 @@ function highlightPermanentHazards(event) {
     })();
 
 
-    for (var hazard of getAllPermanentHazards()) {
+    for (const hazard of getAllPermanentHazards()) {
         const symbol = wmeSDK.Map.getFeatureDomElement({featureId: hazard.id, layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER});
         if (!symbol) continue;
 
