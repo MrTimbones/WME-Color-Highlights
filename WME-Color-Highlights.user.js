@@ -1477,7 +1477,7 @@ async function initialiseHighlights() {
         highlightSegments(e);
     };
 
-    getId('_numRecentDays').onchange = highlightSegmentsAndPlaces;
+    getId('_numRecentDays').onchange = createHighlightMultipleLayers(true, true, true);
     getId('_numRecentDays').onclick = function (e) {
         getId('_cbHighlightRecent').checked = 1;
         createHighlightMultipleLayers(true, true, true)(e);
