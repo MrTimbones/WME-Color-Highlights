@@ -1523,7 +1523,7 @@ async function initialiseHighlights() {
         getId('_cbHighlightEditor').checked = options[13];
         getId('_cbHighlightRoutingPref').checked = options[25];
 
-        getId('_cbHighlightPermanentHazards').checked = options[30];
+        getId('_cbHighlightPermanentHazards').checked = options[30] ?? false;
     }
     else {
         getId('_cbHighlightPlaces').checked = true;
