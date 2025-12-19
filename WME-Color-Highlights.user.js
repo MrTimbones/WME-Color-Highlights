@@ -195,6 +195,8 @@ function initPermanentHazardsLayer() {
     if (addLayerFailed) return;
 
     const addPermanentHazard = (hazard) => {
+        if (!hazard) throw new Error('Permanent hazard is undefined');
+
         wmeSDK.Map.addFeatureToLayer({
             layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER,
             feature: {
