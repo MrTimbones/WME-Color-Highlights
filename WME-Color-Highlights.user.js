@@ -1047,7 +1047,7 @@ function highlightPermanentHazards(event) {
 
         const newFill = shouldHighlightAsEdited(hazard) ? '#0f0' : null;
 
-        if (newFill) {;
+        if (newFill) symbol.setAttribute("fill", newFill);
     }
 }
 
