@@ -172,6 +172,8 @@ function getPermanentHazardDisplayGeometry(objectId) {
         const openLayersGeometry = feature.geometry;
         return W.userscripts.toGeoJSONGeometry(openLayersGeometry);
     }
+
+    throw new Error(`Permanent hazard geometry not found: ${objectId}`);
 }
 
 function initPermanentHazardsLayer() {
