@@ -19,7 +19,6 @@ const PERMANENT_HAZARDS_HIGHLIGHTING_LAYER = 'color_highlights_permanent_hazards
 window.SDK_INITIALIZED.then(() => {
     wmeSDK = getWmeSdk({scriptId: "wme-color-highlights", scriptName: "WME Color Highlights"});
     wmeSDK.Events.once({eventName: "wme-ready"}).then(initialiseHighlights);
-    initPermanentHazardsLayer();
 });
 
 function catchError(fn, errorsToCatch = []) {
@@ -1353,6 +1352,8 @@ function initVenueMainCategories() {
 /* =========================================================================== */
 async function initialiseHighlights() {
     console.group("WME Color Highlights: " + wmech_version);
+
+    initPermanentHazardsLayer();
 
     const scriptTab = await wmeSDK.Sidebar.registerScriptTab();
 
