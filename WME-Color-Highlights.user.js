@@ -110,7 +110,7 @@ function trackDataModelEvents(dataModelName, featureMapper, {
             // ideally, the WME SDK should not throw ValidationError here, but if it does,
             // then we're dealing with a data model that does not support native event tracking through the SDK
             // which is a shame, due to how generic the data model event tracking mechanism is
-            // so we'll have to resort to manually hatching the underlying WME events and match the SDK safety guards
+            // so we'll have to resort to manually hooking the underlying WME events and match the SDK safety guards
 
             if (wmeSDK.Events.trackedDataModels.has(dataModelName)) return;
 
