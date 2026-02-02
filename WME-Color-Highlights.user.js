@@ -1105,7 +1105,7 @@ async function initialiseHighlights() {
     highlightPlacesSection.innerHTML = `
             <label title="parks/trees = green, water = blue, parking lot = cyan, everything else = pink">
                 <input type="checkbox" id="_cbHighlightPlaces" /><b>Highlight Places</b>*
-            </label>
+            </label><br />
             <label><input type="checkbox" id="_cbHighlightLockedPlaces" /> Locked Places* (Red)</label><br>
             <label title="If blank name or street, or wrong category"><input type="checkbox" id="_cbHighlightIncompletePlaces" /> Incomplete Places (Dashed Orange)</label><br>
         `;
