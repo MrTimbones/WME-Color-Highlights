@@ -1057,9 +1057,9 @@ function highlightPermanentHazards(event) {
         const symbol = wmeSDK.Map.getFeatureDomElement({featureId: hazard.id, layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER});
         if (!symbol) continue;
 
-        const newFill = shouldHighlightAsEdited(hazard) ? '#0f0' : null;
+        const newFill = shouldHighlightAsEdited(hazard) ? '#0f0' : 'transparent';
 
-        if (newFill) symbol.setAttribute("fill", newFill);
+        symbol.setAttribute("fill", newFill);
     }
 }
 
