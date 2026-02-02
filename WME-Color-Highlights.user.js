@@ -167,7 +167,7 @@ function trackDataModelEvents(dataModelName, featureMapper, {
  * Get the display geometry for a feature by searching through the provided layers.
  * Can be used to get the geometry as rendered on the map, which may differ from the data model geometry.
  * @param {number|string} objectId The object ID of the feature
- * @param {OpenLayers.Layer} sourceLayers The layers to search through
+ * @param {OpenLayers.Layer[]} sourceLayers The layers to search through
  * @returns {object} The GeoJSON geometry of the feature as it is rendered on the map (not necessarily the same as the data model geometry)
  * @throws {Error} If the feature is not found in any of the provided layers
  */
