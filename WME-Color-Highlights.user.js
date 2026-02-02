@@ -52,7 +52,7 @@ function trackDataModelEvents(dataModelName, featureMapper, {
         wmeSDK.Events.on({
             eventName: 'wme-data-model-object-changed-id',
             eventHandler: createHandler(({ objectIds }) => {
-                if (removed) removed(featureMapper(objectIds.oldID));
+                if (removed) removed(objectIds.oldID);
                 if (added) added(featureMapper(objectIds.newID));
             }),
         });
