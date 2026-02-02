@@ -163,8 +163,16 @@ function trackDataModelEvents(dataModelName, featureMapper, {
     }
 }
 
-function getPermanentHazardDisplayGeometry(objectId) {
-    for (const layer of W.map.permanentHazardLayers) {
+/**
+ * Get the display geometry for a feature by searching through the provided layers.
+ * Can be used to get the geometry as rendered on the map, which may differ from the data model geometry.
+ * @param {number|string} objectId The object ID of the feature
+ * @param {OpenLayers.Layer} sourceLayers The layers to search through
+ * @returns {object} The GeoJSON geometry of the feature as it is rendered on the map (not necessarily the same as the data model geometry)
+ * @throws {Error} If the feature is not found in any of the provided layers
+ */
+function getFeatureDisplayGeometry(objectId, sourceLayers = W.map.layers) {
+    for (const layer of sourceLayers) {
         if (!layer.featureMap) continue;
         if (!layer.featureMap.has(objectId)) continue;
         const feature = layer.featureMap.get(objectId);
@@ -172,10 +180,15 @@ function getPermanentHazardDisplayGeometry(objectId) {
         return W.userscripts.toGeoJSONGeometry(openLayersGeometry);
     }
 
-    throw new Error(`Permanent hazard geometry not found: ${objectId}`);
+    throw new Error(`Feature geometry not found: ${objectId}`);
 }
 
 function initPermanentHazardsLayer() {
+    const permanentHazardLayers = W.map.layers.filter(
+        (layer) => layer.name.includes('permanent_hazard') &&
+                    !layer.name.includes('markers')
+    );
+
     const [addLayerFailed] = catchError(() => {
         wmeSDK.Map.addLayer({
             layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER,
@@ -201,7 +214,7 @@ function initPermanentHazardsLayer() {
             feature: {
                 type: 'Feature',
                 id: hazard.getID(),
-                geometry: getPermanentHazardDisplayGeometry(hazard.getID()),
+                geometry: getFeatureDisplayGeometry(hazard.getID(), permanentHazardLayers),
                 properties: {
                     wazeFeature: hazard,
                 },
