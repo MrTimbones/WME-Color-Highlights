@@ -44,7 +44,7 @@ function trackDataModelEvents(dataModelName, featureMapper, {
             if (dataModelName !== eventDataModelName) return;
             handler(args);
         }
-    }
+    };
 
     let hasSubscribedEvents = false;
     if (added || removed) {
