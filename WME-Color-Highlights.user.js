@@ -1433,7 +1433,8 @@ async function initialiseHighlights() {
             <label title="Highlight Permanent Hazards edited recently or by selected editor">
                 <input type="checkbox" id="_cbHighlightPermanentHazards" />
                 <b>Highlight Permanent Hazards</b>
-            </label>
+            </label><br>
+            <i style="padding-left: 20px">Show recent edits or last editor</i>
         `;
     section.appendChild(highlightHazardsSection);
 
