@@ -1149,6 +1149,16 @@ function updateUserList() {
             editorNames.push(editedBy);
         }
     }
+    // collect array of users who have edited permanent hazards
+    for (const hazard of getAllPermanentHazards()) {
+        editedBy = hazard.modificationData.createdBy;
+        if (hazard.modificationData.updatedBy) {
+            editedBy = hazard.modificationData.updatedBy;
+        }
+        if (editorNames.indexOf(editedBy) == -1) {
+            editorNames.push(editedBy);
+        }
+    }
     if (editorNames.length === 0) {
         return;
     }
