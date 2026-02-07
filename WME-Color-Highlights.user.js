@@ -15,10 +15,229 @@
 const wmech_version = "3.03";
 
 let wmeSDK;
+const PERMANENT_HAZARDS_HIGHLIGHTING_LAYER = 'color_highlights_permanent_hazards';
 window.SDK_INITIALIZED.then(() => {
     wmeSDK = getWmeSdk({scriptId: "wme-color-highlights", scriptName: "WME Color Highlights"});
     wmeSDK.Events.once({eventName: "wme-ready"}).then(initialiseHighlights);
 });
+
+function catchError(fn, errorsToCatch = []) {
+    try {
+        return [null, fn()];
+    } catch (e) {
+        if (!errorsToCatch || errorsToCatch.length === 0 || errorsToCatch.some(error => e instanceof error)) {
+            return [e, null];
+        }
+        throw e;
+    }
+}
+
+function trackDataModelEvents(dataModelName, featureMapper, {
+    added,
+    changed,
+    deleted,
+    removed,
+    saved,
+}) {
+    const createHandler = (handler) => {
+        return ({ dataModelName: eventDataModelName, ...args }) => {
+            if (dataModelName !== eventDataModelName) return;
+            handler(args);
+        }
+    };
+
+    let hasSubscribedEvents = false;
+    if (added || removed) {
+        hasSubscribedEvents = true;
+        wmeSDK.Events.on({
+            eventName: 'wme-data-model-object-changed-id',
+            eventHandler: createHandler(({ objectIds }) => {
+                if (removed) removed(objectIds.oldID);
+                if (added) added(featureMapper(objectIds.newID));
+            }),
+        });
+    }
+    if (added) {
+        hasSubscribedEvents = true;
+        wmeSDK.Events.on({
+            eventName: 'wme-data-model-objects-added',
+            eventHandler: createHandler(({ objectIds }) => {
+                objectIds.forEach((id) => added(featureMapper(id)));
+            }),
+        });
+    }
+    if (changed) {
+        hasSubscribedEvents = true;
+        wmeSDK.Events.on({
+            eventName: 'wme-data-model-objects-changed',
+            eventHandler: createHandler(({ objectIds }) => {
+                objectIds.forEach((id) => changed(featureMapper(id)));
+            }),
+        });
+    }
+    if (deleted) {
+        hasSubscribedEvents = true;
+        wmeSDK.Events.on({
+            eventName: 'wme-data-model-object-state-deleted',
+            eventHandler: createHandler(({ objectIds }) => {
+                objectIds.forEach((id) => deleted(featureMapper(id)));
+            }),
+        });
+    }
+    if (saved) {
+        hasSubscribedEvents = true;
+        wmeSDK.Events.on({
+            eventName: 'wme-data-model-objects-saved',
+            eventHandler: createHandler(({ objectIds }) => {
+                objectIds.forEach((id) => saved(featureMapper(id)));
+            }),
+        });
+    }
+    if (removed) {
+        hasSubscribedEvents = true;
+        wmeSDK.Events.on({
+            eventName: 'wme-data-model-objects-removed',
+            eventHandler: createHandler(({ objectIds }) => {
+                objectIds.forEach((id) => removed(id));
+            }),
+        });
+    }
+
+    if (hasSubscribedEvents) {
+        const [validationError] = catchError(() => wmeSDK.Events.trackDataModelEvents({ dataModelName }), [wmeSDK.Errors.ValidationError]);
+        if (validationError) {
+            // ideally, the WME SDK should not throw ValidationError here, but if it does,
+            // then we're dealing with a data model that does not support native event tracking through the SDK
+            // which is a shame, due to how generic the data model event tracking mechanism is
+            // so we'll have to resort to manually hooking the underlying WME events and match the SDK safety guards
+
+            if (wmeSDK.Events.trackedDataModels.has(dataModelName)) return;
+
+            const repo = W.model.getRepositoryByName(dataModelName);
+            if (!repo)
+                throw new Error(`Data model repository not found: ${dataModelName}`);
+            
+            const eventsToSubscribe = {
+                objectsadded: (features) => {
+                    wmeSDK.Events.eventBus.trigger('wme-data-model-objects-added', {
+                        dataModelName,
+                        objectIds: features.map((f) => f.getID()).filter((id) => id != null),
+                    });
+                },
+                objectschanged: (features) => {
+                    wmeSDK.Events.eventBus.trigger('wme-data-model-objects-changed', {
+                        dataModelName,
+                        objectIds: features.map((f) => f.getID()).filter((id) => id != null),
+                    });
+                },
+                'objectschanged-id': (objectIds) => {
+                    wmeSDK.Events.eventBus.trigger('wme-data-model-object-changed-id', {
+                        dataModelName,
+                        objectIds,
+                    });
+                },
+                objectsremoved: (features) => {
+                    wmeSDK.Events.eventBus.trigger('wme-data-model-objects-removed', {
+                        dataModelName,
+                        objectIds: features.map((f) => f.getID()).filter((id) => id != null),
+                    });
+                },
+                'objects-state-deleted': (features) => {
+                    wmeSDK.Events.eventBus.trigger('wme-data-model-object-state-deleted', {
+                        dataModelName,
+                        objectIds: features.map((f) => f.getID()).filter((id) => id != null),
+                    });
+                },
+                'objectssynced': (features) => {
+                    wmeSDK.Events.eventBus.trigger('wme-data-model-objects-saved', {
+                        dataModelName,
+                        objectIds: features.map((f) => f.getID()).filter((id) => id != null),
+                    });
+                },
+            };
+            Object.entries(eventsToSubscribe).forEach(([eventName, handler]) => {
+                repo.on(eventName, handler);
+            });
+            wmeSDK.Events.trackedDataModels.set(dataModelName, { events: eventsToSubscribe });
+        }
+    }
+}
+
+/**
+ * Get the display geometry for a feature by searching through the provided layers.
+ * Can be used to get the geometry as rendered on the map, which may differ from the data model geometry.
+ * @param {number|string} objectId The object ID of the feature
+ * @param {OpenLayers.Layer[]} sourceLayers The layers to search through
+ * @returns {object} The GeoJSON geometry of the feature as it is rendered on the map (not necessarily the same as the data model geometry)
+ * @throws {Error} If the feature is not found in any of the provided layers
+ */
+function getFeatureDisplayGeometry(objectId, sourceLayers = W.map.layers) {
+    for (const layer of sourceLayers) {
+        if (!layer.featureMap) continue;
+        if (!layer.featureMap.has(objectId)) continue;
+        const feature = layer.featureMap.get(objectId);
+        const openLayersGeometry = feature.geometry;
+        return W.userscripts.toGeoJSONGeometry(openLayersGeometry);
+    }
+
+    throw new Error(`Feature geometry not found: ${objectId}`);
+}
+
+function initPermanentHazardsLayer() {
+    const permanentHazardLayers = W.map.layers.filter(
+        (layer) => layer.name.includes('permanent_hazard') &&
+                    !layer.name.includes('markers')
+    );
+
+    const [addLayerFailed] = catchError(() => {
+        wmeSDK.Map.addLayer({
+            layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER,
+            styleRules: [
+                {
+                    style: {
+                        pointRadius: 20,
+                        fillColor: 'transparent',
+                        fillOpacity: 0.4,
+                        stroke: false,
+                    },
+                },
+            ],
+        });
+    }, [wmeSDK.Errors.InvalidStateError]);
+    if (addLayerFailed) return;
+
+    const addPermanentHazard = (hazard) => {
+        if (!hazard) throw new Error('Permanent hazard is undefined');
+
+        wmeSDK.Map.addFeatureToLayer({
+            layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER,
+            feature: {
+                type: 'Feature',
+                id: hazard.getID(),
+                geometry: getFeatureDisplayGeometry(hazard.getID(), permanentHazardLayers),
+                properties: {
+                    wazeFeature: hazard,
+                },
+            }
+        });
+    };
+    const removePermanentHazard = (hazardId) => {
+        wmeSDK.Map.removeFeatureFromLayer({
+            layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER,
+            featureId: hazardId,
+        });
+    };
+
+    trackDataModelEvents('permanentHazards', (id) => W.model.permanentHazards.objects[id], {
+        added: (hazard) => addPermanentHazard(hazard),
+        removed: (hazardId) => removePermanentHazard(hazardId),
+        deleted: (hazard) => removePermanentHazard(hazard.getID()),
+        changed: (hazard) => {
+            removePermanentHazard(hazard.getID());
+            addPermanentHazard(hazard);
+        },
+    });
+}
 
 // global variables
 const NOT_THIS_USER = 'NOT_THIS_USER';
@@ -758,10 +977,104 @@ function highlightAPlace(venue, fg, bg) {
     }
 }
 
+function getAllPermanentHazards() {
+    return W.model.permanentHazards.getObjectArray().map((object) => ({
+        id: object.getID(),
+        modificationData: {
+            createdOn: object.attributes.createdOn,
+            createdBy: W.model.users.getObjectById(object.attributes.createdBy)?.attributes.userName,
+            updatedOn: object.attributes.updatedOn,
+            updatedBy: W.model.users.getObjectById(object.attributes.updatedBy)?.attributes.userName,
+        },
+    }));
+}
+
+function highlightPermanentHazards(event) {
+    const showHazards = getId('_cbHighlightPermanentHazards').checked;
+
+    // refreshing, reset hazards to original style
+    if (event?.type && /click|change/.test(event.type)) {
+        for (const hazard of getAllPermanentHazards()) {
+            const symbol = wmeSDK.Map.getFeatureDomElement({
+                featureId: hazard.id,
+                layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER
+            });
+
+            symbol?.setAttribute?.("fill", 'transparent');
+        }
+    }
+
+    // if option is disabled, stop now
+    if (!showHazards) {
+        return;
+    }
+
+    const shouldHighlightAsEdited = (() => {
+        const specificEditorId = (() => {
+            if (!getId('_cbHighlightEditor').checked) return null;
+
+            const selectEditor = getId('_selectUser');
+            if (!selectEditor || selectEditor.selectedIndex < 0) return null;
+
+            const editorName = selectEditor.options[selectEditor.selectedIndex].value;
+            return editorName === NOT_THIS_USER ? true : editorName;
+        })();
+        const showRecent = (() => {
+            if (!getId('_cbHighlightRecent').checked) return null;
+
+            const recentDays = getId('_numRecentDays');
+            if (!recentDays || typeof recentDays.value === 'undefined') return null;
+            return recentDays.value;
+        })();
+
+        return (hazard) => {
+            const isMatchSpecificEditor = (() => {
+                if (specificEditorId === null) return false;
+                if (specificEditorId === true)
+                    return hazard.modificationData.updatedBy !== wmeSDK.State.getUserInfo().userName;
+                return hazard.modificationData.updatedBy === specificEditorId;
+            })();
+            const isMatchRecent = showRecent !== null && (() => {
+                const today = new Date();
+                let editDays = (today.getTime() - hazard.modificationData.createdOn) / 86400000;
+                if (hazard.modificationData.updatedOn !== null) {
+                    editDays = (today.getTime() - hazard.modificationData.updatedOn) / 86400000;
+                }
+                return editDays <= showRecent;
+            })();
+
+            if (specificEditorId !== null && showRecent !== null) {
+                // both conditions must be met
+                return isMatchSpecificEditor && isMatchRecent;
+            }
+            
+            return isMatchRecent || isMatchSpecificEditor;
+        };
+    })();
+
+
+    for (const hazard of getAllPermanentHazards()) {
+        const symbol = wmeSDK.Map.getFeatureDomElement({featureId: hazard.id, layerName: PERMANENT_HAZARDS_HIGHLIGHTING_LAYER});
+        if (!symbol) continue;
+
+        const newFill = shouldHighlightAsEdited(hazard) ? '#0f0' : 'transparent';
+
+        symbol.setAttribute("fill", newFill);
+    }
+}
+
 // used when clicking an option that affects both Segments and Places
 function highlightSegmentsAndPlaces(event) {
     highlightSegments(event);
     highlightPlaces(event);
+}
+
+function createHighlightMultipleLayers(segments, places, permanentHazards) {
+    return function(event) {
+        if (segments) highlightSegments(event);
+        if (places) highlightPlaces(event);
+        if (permanentHazards) highlightPermanentHazards(event);
+    }
 }
 
 // add logged in user to drop-down list
@@ -831,6 +1144,16 @@ function updateUserList() {
         editedBy = venue.modificationData.createdBy;
         if (venue.modificationData.updatedBy) {
             editedBy = venue.modificationData.updatedBy;
+        }
+        if (editorNames.indexOf(editedBy) == -1) {
+            editorNames.push(editedBy);
+        }
+    }
+    // collect array of users who have edited permanent hazards
+    for (const hazard of getAllPermanentHazards()) {
+        editedBy = hazard.modificationData.createdBy;
+        if (hazard.modificationData.updatedBy) {
+            editedBy = hazard.modificationData.updatedBy;
         }
         if (editorNames.indexOf(editedBy) == -1) {
             editorNames.push(editedBy);
@@ -1053,6 +1376,8 @@ function initVenueMainCategories() {
 async function initialiseHighlights() {
     console.group("WME Color Highlights: " + wmech_version);
 
+    initPermanentHazardsLayer();
+
     const scriptTab = await wmeSDK.Sidebar.registerScriptTab();
 
     const section = document.createElement('section');
@@ -1111,6 +1436,18 @@ async function initialiseHighlights() {
         `;
     section.appendChild(highlightPlacesSection);
 
+    const highlightHazardsSection = document.createElement('p');
+    highlightHazardsSection.id = "highlightPermanentHazards";
+    highlightHazardsSection.className = 'checkbox';
+    highlightHazardsSection.innerHTML = `
+            <label title="Highlight Permanent Hazards edited recently or by selected editor">
+                <input type="checkbox" id="_cbHighlightPermanentHazards" />
+                <b>Highlight Permanent Hazards</b>
+            </label><br>
+            <i style="padding-left: 20px">Show recent edits or last editor</i>
+        `;
+    section.appendChild(highlightHazardsSection);
+
     // Add footer link
     section.innerHTML += `
             <b><a href="https://greasyfork.org/scripts/3206-wme-color-highlights" target="_blank"><u>WME Color Highlights</u></a></b> &nbsp; v${wmech_version}
@@ -1141,8 +1478,8 @@ async function initialiseHighlights() {
     getId('_cbHighlightRoutingPref').onclick = highlightSegments;
     getId('_cbHighlightNoHN').onclick = highlightSegments;
 
-    getId('_cbHighlightRecent').onclick = highlightSegmentsAndPlaces;
-    getId('_cbHighlightEditor').onclick = highlightSegmentsAndPlaces;
+    getId('_cbHighlightRecent').onclick = createHighlightMultipleLayers(true, true, true);
+    getId('_cbHighlightEditor').onclick = createHighlightMultipleLayers(true, true, true);
     getId('_cbHighlightCity').onclick = highlightSegmentsAndPlaces;
     getId('_cbHighlightCityInvert').onclick = highlightSegmentsAndPlaces;
     getId('_cbHighlightRoadType').onclick = highlightSegments;
@@ -1150,7 +1487,7 @@ async function initialiseHighlights() {
     getId('_selectUser').onfocus = updateUserList;
     getId('_selectUser').onclick = function (e) {
         getId('_cbHighlightEditor').checked = 1;
-        highlightSegmentsAndPlaces(e);
+        createHighlightMultipleLayers(true, true, true)(e);
     };
 
     getId('_selectCity').onfocus = updateCityList;
@@ -1164,15 +1501,17 @@ async function initialiseHighlights() {
         highlightSegments(e);
     };
 
-    getId('_numRecentDays').onchange = highlightSegmentsAndPlaces;
+    getId('_numRecentDays').onchange = createHighlightMultipleLayers(true, true, true);
     getId('_numRecentDays').onclick = function (e) {
         getId('_cbHighlightRecent').checked = 1;
-        highlightSegmentsAndPlaces(e);
+        createHighlightMultipleLayers(true, true, true)(e);
     };
 
     getId('_cbHighlightPlaces').onclick = highlightPlaces;
     getId('_cbHighlightLockedPlaces').onclick = highlightPlaces;
     getId('_cbHighlightIncompletePlaces').onclick = highlightPlaces;
+
+    getId('_cbHighlightPermanentHazards').onclick = highlightPermanentHazards;
 
 
     // restore saved settings
@@ -1207,6 +1546,8 @@ async function initialiseHighlights() {
         getId('_numRecentDays').value = options[12];
         getId('_cbHighlightEditor').checked = options[13];
         getId('_cbHighlightRoutingPref').checked = options[25];
+
+        getId('_cbHighlightPermanentHazards').checked = options[30] ?? false;
     }
     else {
         getId('_cbHighlightPlaces').checked = true;
@@ -1253,6 +1594,9 @@ async function initialiseHighlights() {
             options[13] = getId('_cbHighlightEditor').checked;
             options[25] = getId('_cbHighlightRoutingPref').checked;
 
+            // permanent hazards
+            options[30] = getId('_cbHighlightPermanentHazards').checked;
+
             localStorage.WMEHighlightScript = JSON.stringify(options);
         }
     };
@@ -1278,11 +1622,13 @@ async function initialiseHighlights() {
 const highlightObjectsOnDataLoaded = debounce(function () {
     highlightSegments();
     highlightPlaces();
+    highlightPermanentHazards();
 }, 300);
 
 const highlightObjectsOnMouseMove = debounce(function () {
     highlightSegments();
     highlightPlaces();
+    highlightPermanentHazards();
 }, 250);
 
 function debounce(func, wait) {
