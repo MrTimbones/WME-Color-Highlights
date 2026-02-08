@@ -269,6 +269,7 @@ function highlightSegments(event) {
 
     const showRecent = getId('_cbHighlightRecent').checked;
     let specificEditor = getId('_cbHighlightEditor').checked;
+    const specificEditorInvert = getId('_cbHighlightEditorInvert').checked;
 
     // master switch when all options are off
     if (!(showLocked || showToll || showNoCity || showNoName || showAltName || showOneWay || showRestrictions
@@ -616,17 +617,20 @@ function highlightSegments(event) {
 
         // highlight segments by selected user, unless already highlighted
         if (specificEditor && !showRecent) {
-            if (updatedBy == selectedUserId && newColor == "#dd7700") {
+            let editorMatch = (updatedBy == selectedUserId);
+            if (selectedUserId === NOT_THIS_USER) {
+                editorMatch = (updatedBy != wmeSDK.State.getUserInfo().userName);
+            }
+            if (specificEditorInvert) {
+                editorMatch = !editorMatch;
+            }
+            
+            if (editorMatch && newColor == "#dd7700") {
                 newColor = "#00ff00";
                 newOpacity = 0.5;
                 numUserHighlighted++;
             }
-            else if (selectedUserId === NOT_THIS_USER && updatedBy != wmeSDK.State.getUserInfo().userName && newColor == "#dd7700") {
-                newColor = "#00ff00";
-                newOpacity = 0.5;
-                numUserHighlighted++;
-            }
-            else if (updatedBy != selectedUserId) {
+            else if (!editorMatch) {
                 newColor = "#dd7700";
                 newOpacity = 0.001;
                 newDashes = "none";
@@ -770,6 +774,7 @@ function highlightPlaces(event) {
     }
 
     let specificEditor = getId('_cbHighlightEditor').checked;
+    const specificEditorInvert = getId('_cbHighlightEditorInvert').checked;
 
     if (specificEditor) {
         const selectEditor = getId('_selectUser');
@@ -891,7 +896,15 @@ function highlightPlaces(event) {
 
         // highlight places which have been edited by selected editor = green
         if (specificEditor) {
-            if (selectedEditorId === venue.modificationData.updatedBy) {
+            let editorMatch = (selectedEditorId === venue.modificationData.updatedBy);
+            if (selectedEditorId === NOT_THIS_USER) {
+                editorMatch = (venue.modificationData.updatedBy !== wmeSDK.State.getUserInfo().userName);
+            }
+            if (specificEditorInvert) {
+                editorMatch = !editorMatch;
+            }
+            
+            if (editorMatch) {
                 highlightAPlace(venue, "#0f0", "#8f8");
                 continue;
             }
@@ -1019,6 +1032,7 @@ function highlightPermanentHazards(event) {
             const editorName = selectEditor.options[selectEditor.selectedIndex].value;
             return editorName === NOT_THIS_USER ? true : editorName;
         })();
+        const specificEditorInvert = getId('_cbHighlightEditorInvert').checked;
         const showRecent = (() => {
             if (!getId('_cbHighlightRecent').checked) return null;
 
@@ -1028,12 +1042,15 @@ function highlightPermanentHazards(event) {
         })();
 
         return (hazard) => {
-            const isMatchSpecificEditor = (() => {
+            let isMatchSpecificEditor = (() => {
                 if (specificEditorId === null) return false;
                 if (specificEditorId === true)
                     return hazard.modificationData.updatedBy !== wmeSDK.State.getUserInfo().userName;
                 return hazard.modificationData.updatedBy === specificEditorId;
             })();
+            if (specificEditorInvert && specificEditorId !== null) {
+                isMatchSpecificEditor = !isMatchSpecificEditor;
+            }
             const isMatchRecent = showRecent !== null && (() => {
                 const today = new Date();
                 let editDays = (today.getTime() - hazard.modificationData.createdOn) / 86400000;
@@ -1416,7 +1433,8 @@ async function initialiseHighlights() {
             <b>Advanced Options</b><br>
             <label><input type="checkbox" id="_cbHighlightRecent" /> Recently Edited (Green)</label><br>
             <input type="number" min="0" max="365" size="3" id="_numRecentDays" style="margin: 0 0 4px 20px" /> days<br>
-            <label><input type="checkbox" id="_cbHighlightEditor" /> Filter by Editor (Green)</label><br>
+            <label><input type="checkbox" id="_cbHighlightEditor" /> Filter by Editor (Green)</label> &nbsp;
+            <label><input type="checkbox" id="_cbHighlightEditorInvert" /> invert</label><br>
             <select id="_selectUser" name="_selectUser" style="margin: 0 0 4px 20px"></select>
             <span id="_numUserHighlighted"></span><br>
             <label><input type="checkbox" id="_cbHighlightRoutingPref" /> Routing Preference (Mixed)</label><br>
@@ -1480,6 +1498,7 @@ async function initialiseHighlights() {
 
     getId('_cbHighlightRecent').onclick = createHighlightMultipleLayers(true, true, true);
     getId('_cbHighlightEditor').onclick = createHighlightMultipleLayers(true, true, true);
+    getId('_cbHighlightEditorInvert').onclick = createHighlightMultipleLayers(true, true, true);
     getId('_cbHighlightCity').onclick = highlightSegmentsAndPlaces;
     getId('_cbHighlightCityInvert').onclick = highlightSegmentsAndPlaces;
     getId('_cbHighlightRoadType').onclick = highlightSegments;
@@ -1548,6 +1567,7 @@ async function initialiseHighlights() {
         getId('_cbHighlightRoutingPref').checked = options[25];
 
         getId('_cbHighlightPermanentHazards').checked = options[30] ?? false;
+        getId('_cbHighlightEditorInvert').checked = options[31] ?? false;
     }
     else {
         getId('_cbHighlightPlaces').checked = true;
@@ -1596,6 +1616,9 @@ async function initialiseHighlights() {
 
             // permanent hazards
             options[30] = getId('_cbHighlightPermanentHazards').checked;
+            
+            // editor invert
+            options[31] = getId('_cbHighlightEditorInvert').checked;
 
             localStorage.WMEHighlightScript = JSON.stringify(options);
         }
