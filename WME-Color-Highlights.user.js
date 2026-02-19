@@ -240,7 +240,6 @@ function initPermanentHazardsLayer() {
 }
 
 // global variables
-const NOT_THIS_USER = 'NOT_THIS_USER';
 
 const advancedMode = false;
 const lastModified = false;
@@ -618,9 +617,6 @@ function highlightSegments(event) {
         // highlight segments by selected user, unless already highlighted
         if (specificEditor && !showRecent) {
             let editorMatch = (updatedBy == selectedUserId);
-            if (selectedUserId === NOT_THIS_USER) {
-                editorMatch = (updatedBy != wmeSDK.State.getUserInfo().userName);
-            }
             if (specificEditorInvert) {
                 editorMatch = !editorMatch;
             }
@@ -897,9 +893,6 @@ function highlightPlaces(event) {
         // highlight places which have been edited by selected editor = green
         if (specificEditor) {
             let editorMatch = (selectedEditorId === venue.modificationData.updatedBy);
-            if (selectedEditorId === NOT_THIS_USER) {
-                editorMatch = (venue.modificationData.updatedBy !== wmeSDK.State.getUserInfo().userName);
-            }
             if (specificEditorInvert) {
                 editorMatch = !editorMatch;
             }
@@ -1029,8 +1022,7 @@ function highlightPermanentHazards(event) {
             const selectEditor = getId('_selectUser');
             if (!selectEditor || selectEditor.selectedIndex < 0) return null;
 
-            const editorName = selectEditor.options[selectEditor.selectedIndex].value;
-            return editorName === NOT_THIS_USER ? true : editorName;
+            return selectEditor.options[selectEditor.selectedIndex].value;
         })();
         const specificEditorInvert = getId('_cbHighlightEditorInvert').checked;
         const showRecent = (() => {
@@ -1044,8 +1036,6 @@ function highlightPermanentHazards(event) {
         return (hazard) => {
             let isMatchSpecificEditor = (() => {
                 if (specificEditorId === null) return false;
-                if (specificEditorId === true)
-                    return hazard.modificationData.updatedBy !== wmeSDK.State.getUserInfo().userName;
                 return hazard.modificationData.updatedBy === specificEditorId;
             })();
             if (specificEditorInvert && specificEditorId !== null) {
@@ -1199,18 +1189,6 @@ function updateUserList() {
             usrOption.setAttribute('selected', true);
         }
         usrOption.setAttribute('value', id);
-        usrOption.appendChild(usrText);
-        selectUser.appendChild(usrOption);
-    }
-
-    const thisUser = wmeSDK.State.getUserInfo();
-    if (thisUser !== null) {
-        usrOption = document.createElement('option');
-        usrText = document.createTextNode("(all except me)");
-        if (currentId !== null && -thisUser.userName == currentId) {
-            usrOption.setAttribute('selected', true);
-        }
-        usrOption.setAttribute('value', NOT_THIS_USER);
         usrOption.appendChild(usrText);
         selectUser.appendChild(usrOption);
     }
