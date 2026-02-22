@@ -1133,7 +1133,12 @@ function updateUserList() {
         currentId = selectUser.options[selectUser.selectedIndex].value;
 
     // collect array of users who have edited segments
+    // create list of editors, starting with logged in user
     const editorNames = [];
+    const thisUser = wmeSDK.State.getUserInfo();
+    editorNames.push(thisUser.userName);
+
+    // collect array of users who have edited segments
     for (let segment of wmeSDK.DataModel.Segments.getAll()) {
         if (!segment) {
             continue;
