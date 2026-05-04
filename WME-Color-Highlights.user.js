@@ -9,10 +9,10 @@
 // @grant               none
 // @downloadURL         https://update.greasyfork.org/scripts/3206/WME%20Color%20Highlights.user.js
 // @updateURL           https://update.greasyfork.org/scripts/3206/WME%20Color%20Highlights.meta.js
-// @version             3.03
+// @version             3.10
 // ==/UserScript==
 
-const wmech_version = "3.03";
+const wmech_version = "3.10";
 
 let wmeSDK;
 const PERMANENT_HAZARDS_HIGHLIGHTING_LAYER = 'color_highlights_permanent_hazards';
@@ -184,8 +184,7 @@ function getFeatureDisplayGeometry(objectId, sourceLayers = W.map.layers) {
 }
 
 function getAllPermanentHazardLayers() {
-    const allLayers = W.map.getLayers();
-    return allLayers.filter(
+    return W.map.getLayers().filter(
         (layer) => layer.name.includes('permanent_hazard') &&
                     !layer.name.includes('markers')
     );
