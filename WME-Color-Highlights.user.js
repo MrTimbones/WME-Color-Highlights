@@ -183,11 +183,16 @@ function getFeatureDisplayGeometry(objectId, sourceLayers = W.map.layers) {
     throw new Error(`Feature geometry not found: ${objectId}`);
 }
 
-function initPermanentHazardsLayer() {
-    const permanentHazardLayers = W.map.layers.filter(
+function getAllPermanentHazardLayers() {
+    const allLayers = W.map.getLayers();
+    return allLayers.filter(
         (layer) => layer.name.includes('permanent_hazard') &&
                     !layer.name.includes('markers')
     );
+}
+
+function initPermanentHazardsLayer() {
+    const permanentHazardLayers = getAllPermanentHazardLayers();
 
     const [addLayerFailed] = catchError(() => {
         wmeSDK.Map.addLayer({
