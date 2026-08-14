@@ -277,7 +277,7 @@ function highlightSegments(event) {
     // master switch when all options are off
     if (!(showLocked || showToll || showNoCity || showNoName || showAltName || showOneWay || showRestrictions
           || specificCity || specificEditor || specificRoadType || showRecent || showSpeedLimits || showAvgSpeedCams
-          || showLanes || showNoHNs)) {
+          || showLanes || showNoHNs || showRoutingPref)) {
         if (event?.type == 'click') {
             for (var segment of wmeSDK.DataModel.Segments.getAll()) {
                 var line = wmeSDK.Map.getFeatureDomElement({featureId: segment.id, layerName: "segments"});
